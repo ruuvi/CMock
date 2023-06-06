@@ -11,8 +11,20 @@ if $0 == __FILE__
   end
 
   require "#{ENV['UNITY_DIR']}/auto/generate_test_runner"
+  require 'yaml'
+
+  if ENV['CEEDLING_MAIN_PROJECT_FILE']
+    project_config_file_name = ENV['CEEDLING_MAIN_PROJECT_FILE']
+    project_config = YAML.load_file(project_config_file_name)
+    if ENV['PROJECT_BUILD_ROOT']
+      project_config[:project][:build_root] = ENV['PROJECT_BUILD_ROOT']
+    end
+    runner_generator = UnityTestRunnerGenerator.new(project_config[:cmock])
+  else
+    runner_generator = UnityTestRunnerGenerator.new()
+  end
 
   test = ARGV[0]
   runner = ARGV[1]
-  UnityTestRunnerGenerator.new.run(test, runner)
+  runner_generator.run(test, runner)
 end

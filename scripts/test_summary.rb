@@ -6,7 +6,12 @@ begin
   build_dir = ENV.fetch('BUILD_DIR', './build')
   test_build_dir = ENV.fetch('TEST_BUILD_DIR', File.join(build_dir, 'test'))
 
-  results = Dir["#{test_build_dir}/*.testresult"]
+  if test_build_dir.empty?
+    results = Dir["#{build_dir}/**/*.testresult"]
+  else
+    results = Dir["#{test_build_dir}/*.testresult"]
+  end
+
   parser = UnityTestSummary.new
   parser.targets = results
   parser.run
