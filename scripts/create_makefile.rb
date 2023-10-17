@@ -58,21 +58,27 @@ project_linker_flags.reject! { |arg| arg.include?('$') }
 list_of_paths_without_wildcards = []
 
 paths_with_wildcards.each do |path|
+  if path.start_with?('+:') || path.start_with?('-:')
+    operator = path.slice!(0,2)[0]
+  else
+    operator = '+'
+  end
+
   # Remove any trailing wildcards and slashes
   base_path = path.chomp('**').chomp('*').chomp('/')
 
-  # Add the base path
-  list_of_paths_without_wildcards << base_path
+  # Add/remove the base path
+  operator == '+' ? list_of_paths_without_wildcards << base_path : list_of_paths_without_wildcards.delete(base_path)
 
   # If the path includes a '**', add all subdirectories
   if path.include?('**')
     Dir.glob("#{base_path}/**/").each do |subdir|
-      list_of_paths_without_wildcards << subdir.chomp('/')
+      operator == '+' ? list_of_paths_without_wildcards << subdir.chomp('/') : list_of_paths_without_wildcards.delete(subdir.chomp('/'))
     end
     # If the path includes a '*', add all direct subdirectories
   elsif path.include?('*')
     Dir.glob("#{base_path}/*/").each do |subdir|
-      list_of_paths_without_wildcards << subdir.chomp('/')
+      operator == '+' ? list_of_paths_without_wildcards << subdir.chomp('/') : list_of_paths_without_wildcards.delete(subdir.chomp('/'))
     end
   end
 end
