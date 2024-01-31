@@ -58,21 +58,27 @@ project_linker_flags.reject! { |arg| arg.include?('$') }
 list_of_paths_without_wildcards = []
 
 paths_with_wildcards.each do |path|
+  if path.start_with?('+:') || path.start_with?('-:')
+    operator = path.slice!(0,2)[0]
+  else
+    operator = '+'
+  end
+
   # Remove any trailing wildcards and slashes
   base_path = path.chomp('**').chomp('*').chomp('/')
 
-  # Add the base path
-  list_of_paths_without_wildcards << base_path
+  # Add/remove the base path
+  operator == '+' ? list_of_paths_without_wildcards << base_path : list_of_paths_without_wildcards.delete(base_path)
 
   # If the path includes a '**', add all subdirectories
   if path.include?('**')
     Dir.glob("#{base_path}/**/").each do |subdir|
-      list_of_paths_without_wildcards << subdir.chomp('/')
+      operator == '+' ? list_of_paths_without_wildcards << subdir.chomp('/') : list_of_paths_without_wildcards.delete(subdir.chomp('/'))
     end
     # If the path includes a '*', add all direct subdirectories
   elsif path.include?('*')
     Dir.glob("#{base_path}/*/").each do |subdir|
-      list_of_paths_without_wildcards << subdir.chomp('/')
+      operator == '+' ? list_of_paths_without_wildcards << subdir.chomp('/') : list_of_paths_without_wildcards.delete(subdir.chomp('/'))
     end
   end
 end
@@ -107,7 +113,6 @@ all_headers.each do |file|
   include_paths << File.dirname(file)
 end
 include_paths.uniq!
-include_paths_c_flags = include_paths.map { |dir| "-I #{dir}" }.join(' ')
 
 
 if project_config
@@ -163,6 +168,7 @@ TEST_BIN_DIR = OUT_DIR
 MOCK_PREFIX = ENV.fetch('TEST_MOCK_PREFIX', 'mock_')
 MOCK_SUFFIX = ENV.fetch('TEST_MOCK_SUFFIX', '')
 TEST_MAKEFILE = ENV.fetch('TEST_MAKEFILE', File.join(TEST_BUILD_DIR, 'MakefileTestSupport'))
+TEST_MAKEFILE_INC = TEST_MAKEFILE + '.inc'
 MOCK_MATCHER = /#{MOCK_PREFIX}[A-Za-z_][A-Za-z0-9_\-\.]+#{MOCK_SUFFIX}/
 
 [TEST_BUILD_DIR, OUT_DIR, OBJ_DIR, ASM_DIR, RUNNERS_DIR, MOCKS_DIR, TEST_BIN_DIR].each do |dir|
@@ -172,6 +178,10 @@ end
 all_headers_to_mock = []
 
 suppress_error = !ARGV.nil? && !ARGV.empty? && (ARGV[0].casecmp('--SILENT') == 0)
+
+File.open(TEST_MAKEFILE_INC, 'w') do |mkfile|
+  mkfile.puts include_paths.map { |dir| "-I\"#{dir}\"" }.join("\n")
+end
 
 File.open(TEST_MAKEFILE, 'w') do |mkfile|
   # Define make variables
@@ -248,7 +258,7 @@ File.open(TEST_MAKEFILE, 'w') do |mkfile|
       makefile_targets.push(module_obj)
       header_deps = cfg[:includes][:local].select { |name| name =~ MOCK_MATCHER }.map { |name| File.join(MOCKS_DIR, name) }.join(' ')
       mkfile.puts "#{module_obj}: #{module_src} #{header_deps}"
-      mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} -I #{File.dirname(module_src)} #{include_paths_c_flags} ${INCLUDE_PATH}"
+      mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} -I #{File.dirname(module_src)} @#{TEST_MAKEFILE_INC} ${INCLUDE_PATH}"
       mkfile.puts ''
     end
 
@@ -264,7 +274,7 @@ File.open(TEST_MAKEFILE, 'w') do |mkfile|
         local_deps_src_path = all_sources_dict["#{name}.c"]
         local_deps_header_path = all_headers_dict["#{name}.h"]
         mkfile.puts "#{local_deps_obj}: #{local_deps_src_path} #{local_deps_header_path}"
-        mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} -I #{File.dirname(module_src)} #{include_paths_c_flags} ${INCLUDE_PATH}"
+        mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} -I #{File.dirname(module_src)} @#{TEST_MAKEFILE_INC} ${INCLUDE_PATH}"
         mkfile.puts ''
       end
     end
@@ -297,7 +307,7 @@ File.open(TEST_MAKEFILE, 'w') do |mkfile|
 
     # Build runner
     mkfile.puts "#{runner_obj}: #{runner_source}"
-    mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} #{include_paths_c_flags} -I #{MOCKS_DIR} -I #{UNITY_SRC} -I #{CMOCK_SRC} ${INCLUDE_PATH}"
+    mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} @#{TEST_MAKEFILE_INC} -I #{MOCKS_DIR} -I #{UNITY_SRC} -I #{CMOCK_SRC} ${INCLUDE_PATH}"
     mkfile.puts ''
 
     # Collect mocks to generate
@@ -330,7 +340,7 @@ File.open(TEST_MAKEFILE, 'w') do |mkfile|
 
     # Build test suite
     mkfile.puts "#{test_obj}: #{test} #{module_obj} #{mock_objs.join(' ')}"
-    mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} #{include_paths_c_flags} -I #{UNITY_SRC} -I #{CMOCK_SRC} -I #{MOCKS_DIR} ${INCLUDE_PATH}"
+    mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} @#{TEST_MAKEFILE_INC} -I #{UNITY_SRC} -I #{CMOCK_SRC} -I #{MOCKS_DIR} ${INCLUDE_PATH}"
     mkfile.puts ''
 
     # Build test suite executable
@@ -368,7 +378,7 @@ File.open(TEST_MAKEFILE, 'w') do |mkfile|
     mkfile.puts ''
 
     mkfile.puts "#{mock_obj}: #{mock_src} #{mock_header}"
-    mkfile.puts "\t${CC} -o $@ -c $< ${#{PROJECT_TEST_CFLAGS_MACRO}} -I #{MOCKS_DIR} #{include_paths_c_flags} -I #{UNITY_SRC} -I #{CMOCK_SRC} ${INCLUDE_PATH}"
+    mkfile.puts "\t${CC} -o $@ -c $< ${#{PROJECT_TEST_CFLAGS_MACRO}} -I #{MOCKS_DIR} @#{TEST_MAKEFILE_INC} -I #{UNITY_SRC} -I #{CMOCK_SRC} ${INCLUDE_PATH}"
     mkfile.puts ''
 
     mkfile.puts "generate_cmock_mocks_and_runners: #{mock_src} #{mock_header}"
