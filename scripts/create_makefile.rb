@@ -108,7 +108,8 @@ all_headers_dict = all_headers.each_with_object({}) do |file_path, hash|
   hash[file_name] = file_path
 end
 
-include_paths = []
+include_paths = project_config&.dig(:paths, :include)&.flatten || []
+
 all_headers.each do |file|
   include_paths << File.dirname(file)
 end
