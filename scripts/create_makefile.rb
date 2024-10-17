@@ -340,7 +340,7 @@ File.open(TEST_MAKEFILE, 'w') do |mkfile|
     all_headers_to_mock.uniq!
 
     # Build test suite
-    mkfile.puts "#{test_obj}: #{test} #{module_obj} #{mock_objs.join(' ')}"
+    mkfile.puts "#{test_obj}: #{test} #{all_headers_to_mock.join(' ')}"
     mkfile.puts "\t${CC} -o $@ -c $< ${#{test_cflags_macro}} @#{TEST_MAKEFILE_INC} -I #{UNITY_SRC} -I #{CMOCK_SRC} -I #{MOCKS_DIR} ${INCLUDE_PATH}"
     mkfile.puts ''
 
